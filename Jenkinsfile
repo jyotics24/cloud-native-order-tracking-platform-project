@@ -29,6 +29,22 @@ pipeline {
             }
         }
 
+        // ---------------------------------------------------
+        // Stage 2: Docker Build
+        // Builds the application image using the Dockerfile
+        // at the repo root. Tags the image with the Jenkins
+        // build number so every build produces a unique,
+        // traceable image (e.g. order-tracking-app:5).
+        // ---------------------------------------------------
+        stage("Docker Build") {
+            steps {
+                sh """
+                    docker build -t order-tracking-app:${BUILD_NUMBER} .
+                    docker tag order-tracking-app:${BUILD_NUMBER} order-tracking-app:latest
+                """
+            }
+        }
+
     }
 
     // ---------------------------------------------------
