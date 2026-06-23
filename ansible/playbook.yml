@@ -1,0 +1,186 @@
+# playbook.yml
+# Installs Jenkins on the EC2 instance.
+# Target: the [jenkins] group defined in inventory.ini
+# This is Ubuntu 24.04 LTS, so we use 'apt' as the package manager.
+
+- name: Install and configure Jenkins on EC2
+  hosts: jenkins
+  become: true   # run tasks as root (sudo), required to install packages
+
+  tasks:
+
+    # ---------------------------------------------------
+    # Step 1: Update package index and upgrade existing packages
+    # ---------------------------------------------------
+    - name: Update apt package index
+      apt:
+        update_cache: true
+
+    - name: Upgrade all system packages
+      apt:
+        upgrade: dist
+
+    # ---------------------------------------------------
+    # Step 2: Install Java 21
+    # Jenkins requires Java to run (Java 21 is the
+    # minimum supported version for recent Jenkins releases)
+    # ---------------------------------------------------
+    - name: Install Java 21 (OpenJDK)
+      apt:
+        name: openjdk-21-jdk
+        state: present
+
+    # ---------------------------------------------------
+    # Step 2b: Install Python virtual environment support
+    # The Jenkinsfile's "Unit Testing" stage creates a venv
+    # to run pytest. Ubuntu ships python3 but not the venv/
+    # ensurepip components by default - this installs them.
+    # ---------------------------------------------------
+    - name: Install python3-venv (for Jenkins pipeline virtualenvs)
+      apt:
+        name: python3-venv
+        state: present
+
+    # ---------------------------------------------------
+    # Step 3: Install prerequisite packages
+    # gnupg and curl are needed to add Jenkins' repo key
+    # ---------------------------------------------------
+    - name: Install prerequisites (gnupg, curl)
+      apt:
+        name:
+          - gnupg
+          - curl
+        state: present
+
+    # ---------------------------------------------------
+    # Step 4: Import the Jenkins GPG key
+    # Required to verify the authenticity of the Jenkins package.
+    # ---------------------------------------------------
+    - name: Download Jenkins GPG key (raw)
+      get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /tmp/jenkins.io-2026.key
+        mode: '0644'
+
+    - name: Dearmor Jenkins GPG key into correct keyring format
+      shell: gpg --dearmor --yes --output /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins.io-2026.key
+      args:
+        creates: /usr/share/keyrings/jenkins-keyring.gpg
+
+    # ---------------------------------------------------
+    # Step 5: Add the Jenkins repository
+    # Jenkins is not in the default Ubuntu repos,
+    # so we add Jenkins' official Debian-stable repo.
+    # ---------------------------------------------------
+    - name: Add Jenkins apt repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
+        state: present
+        filename: jenkins
+
+    # ---------------------------------------------------
+    # Step 6: Update apt cache again after adding the new repo
+    # ---------------------------------------------------
+    - name: Update apt cache after adding Jenkins repo
+      apt:
+        update_cache: true
+
+    # ---------------------------------------------------
+    # Step 7: Install Jenkins
+    # ---------------------------------------------------
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    # ---------------------------------------------------
+    # Step 8: Start and enable Jenkins service
+    # 'enabled: true' makes Jenkins auto-start on reboot.
+    # ---------------------------------------------------
+    - name: Start and enable Jenkins service
+      systemd:
+        name: jenkins
+        state: started
+        enabled: true
+
+    # ---------------------------------------------------
+    # Step 9: Wait until Jenkins web port is responding
+    # Jenkins takes a few seconds to fully boot up after
+    # the service starts.
+    # ---------------------------------------------------
+    - name: Wait for Jenkins to be available on port 8080
+      wait_for:
+        port: 8080
+        delay: 10
+        timeout: 120
+
+    # ---------------------------------------------------
+    # Step 10: Install Docker
+    # Required for the pipeline's "Docker Build" stage,
+    # which builds the application image directly on the
+    # Jenkins server. We use Docker's official apt repo
+    # for the most current, supported version.
+    # ---------------------------------------------------
+    - name: Install prerequisites for Docker repo
+      apt:
+        name:
+          - ca-certificates
+        state: present
+
+    - name: Create Docker GPG keyring directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker GPG key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker apt repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        state: present
+        filename: docker
+
+    - name: Update apt cache after adding Docker repo
+      apt:
+        update_cache: true
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    # ---------------------------------------------------
+    # Step 11: Allow the jenkins user to run Docker commands
+    # By default only root can use Docker. Adding the jenkins
+    # user to the 'docker' group lets pipeline steps run
+    # 'docker build' without needing sudo.
+    # ---------------------------------------------------
+    - name: Add jenkins user to docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: true
+
+    # ---------------------------------------------------
+    # Step 12: Restart Jenkins so the group membership change
+    # takes effect (group membership is applied at login/process
+    # start, so Jenkins must restart to pick it up).
+    # ---------------------------------------------------
+    - name: Restart Jenkins to apply docker group membership
+      systemd:
+        name: jenkins
+        state: restarted
+
+    - name: Wait for Jenkins to be available again after restart
+      wait_for:
+        port: 8080
+        delay: 10
+        timeout: 120

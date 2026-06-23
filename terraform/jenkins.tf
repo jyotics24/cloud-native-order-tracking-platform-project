@@ -1,25 +1,17 @@
 # ==================================================
-# Get Latest Amazon Linux 2023 AMI
+# Get Latest Ubuntu 24.04 LTS AMI via SSM
 # ==================================================
-# Automatically fetches the latest Amazon Linux 2023
-# AMI from AWS.
+# Uses AWS's official SSM Parameter Store path, which
+# Canonical and AWS keep updated automatically. This is
+# more reliable than wildcard name matching, which can
+# break if Ubuntu changes its AMI naming convention.
 #
-# This avoids hardcoding AMI IDs, which change
-# frequently across regions and over time.
+# Ubuntu does not restrict /tmp to a small RAM-backed
+# filesystem like Amazon Linux 2023 does, avoiding the
+# Jenkins "Free Temp Space" false-positive entirely.
 # ==================================================
-
-data "aws_ami" "amazon_linux" {
-
-  # Get the most recent matching AMI
-  most_recent = true
-
-  # Official AWS account
-  owners = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["al2023-ami-*-x86_64"]
-  }
+data "aws_ssm_parameter" "ubuntu" {
+  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
 # ==================================================
@@ -37,8 +29,8 @@ data "aws_ami" "amazon_linux" {
 
 resource "aws_instance" "jenkins_server" {
 
-  # Latest Amazon Linux 2023 AMI
-  ami = data.aws_ami.amazon_linux.id
+  # Latest Ubuntu 24.04 LTS AMI
+  ami = data.aws_ssm_parameter.ubuntu.value
 
   # Recommended size for Jenkins + Docker
   instance_type = "t3.micro"
