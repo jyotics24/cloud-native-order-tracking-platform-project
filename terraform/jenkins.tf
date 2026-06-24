@@ -33,7 +33,7 @@ resource "aws_instance" "jenkins_server" {
   ami = data.aws_ssm_parameter.ubuntu.value
 
   # Recommended size for Jenkins + Docker
-  instance_type = "t3.micro"
+  instance_type = "c7i-flex.large"
 
   # Existing AWS Key Pair
   # Required for SSH access

@@ -184,3 +184,30 @@
         port: 8080
         delay: 10
         timeout: 120
+
+    # ---------------------------------------------------
+    # Step 13: Install Trivy
+    # Trivy scans Docker images for known vulnerabilities
+    # (CVEs) in OS packages and language dependencies.
+    # Uses Trivy's official apt repo for the latest version.
+    # ---------------------------------------------------
+    - name: Add Trivy GPG key
+      get_url:
+        url: https://aquasecurity.github.io/trivy-repo/deb/public.key
+        dest: /etc/apt/keyrings/trivy.asc
+        mode: '0644'
+
+    - name: Add Trivy apt repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/trivy.asc] https://aquasecurity.github.io/trivy-repo/deb generic main"
+        state: present
+        filename: trivy
+
+    - name: Update apt cache after adding Trivy repo
+      apt:
+        update_cache: true
+
+    - name: Install Trivy
+      apt:
+        name: trivy
+        state: present
