@@ -89,11 +89,7 @@ pipeline {
         // =====================================================
         stage("Terraform Apply - ECR") {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "aws-jenkins-ecr",
-                    usernameVariable: "AWS_ACCESS_KEY_ID",
-                    passwordVariable: "AWS_SECRET_ACCESS_KEY"
-                )]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
                     dir("terraform-app") {
                         sh """
                             docker run --rm \
@@ -125,11 +121,7 @@ pipeline {
         // =====================================================
         stage("Push to ECR") {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "aws-jenkins-ecr",
-                    usernameVariable: "AWS_ACCESS_KEY_ID",
-                    passwordVariable: "AWS_SECRET_ACCESS_KEY"
-                )]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
                     sh """
                         docker run --rm \
                             -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
