@@ -78,6 +78,71 @@ pipeline {
             }
         }
 
+        // =====================================================
+        // Stage 5: Terraform Apply (App Infra - ECR)
+        // =====================================================
+        // Runs Terraform inside an official HashiCorp Docker
+        // image to create/update the ECR repository. This is a
+        // SEPARATE Terraform state from the Jenkins EC2 itself,
+        // so this stage can never modify or destroy the server
+        // it's running on.
+        // =====================================================
+        stage("Terraform Apply - ECR") {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "aws-jenkins-ecr",
+                    usernameVariable: "AWS_ACCESS_KEY_ID",
+                    passwordVariable: "AWS_SECRET_ACCESS_KEY"
+                )]) {
+                    dir("terraform-app") {
+                        sh """
+                            docker run --rm \
+                                -v $(pwd):/workspace \
+                                -w /workspace \
+                                -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+                                -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+                                -e AWS_DEFAULT_REGION=us-east-1 \
+                                hashicorp/terraform:latest init
+                            docker run --rm \
+                                -v $(pwd):/workspace \
+                                -w /workspace \
+                                -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+                                -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+                                -e AWS_DEFAULT_REGION=us-east-1 \
+                                hashicorp/terraform:latest apply -auto-approve
+                        """
+                    }
+                }
+            }
+        }
+
+        // =====================================================
+        // Stage 6: Push Image to ECR
+        // =====================================================
+        // Authenticates Docker to ECR using the AWS CLI, then
+        // tags and pushes the image built earlier in the
+        // pipeline to the ECR repository created above.
+        // =====================================================
+        stage("Push to ECR") {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "aws-jenkins-ecr",
+                    usernameVariable: "AWS_ACCESS_KEY_ID",
+                    passwordVariable: "AWS_SECRET_ACCESS_KEY"
+                )]) {
+                    sh """
+                        docker run --rm \
+                            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+                            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+                            -e AWS_DEFAULT_REGION=us-east-1 \
+                            amazon/aws-cli ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 227655494308.dkr.ecr.us-east-1.amazonaws.com
+                        docker tag order-tracking-app:${BUILD_NUMBER} 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
+                        docker push 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
+                    """
+                }
+            }
+        }
+
     }
 
     // =====================================================
