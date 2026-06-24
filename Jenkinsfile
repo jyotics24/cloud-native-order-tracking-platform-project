@@ -97,17 +97,17 @@ pipeline {
                     dir("terraform-app") {
                         sh """
                             docker run --rm \
-                                -v $(pwd):/workspace \
+                                -v \$(pwd):/workspace \
                                 -w /workspace \
-                                -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-                                -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
                                 -e AWS_DEFAULT_REGION=us-east-1 \
                                 hashicorp/terraform:latest init
                             docker run --rm \
-                                -v $(pwd):/workspace \
+                                -v \$(pwd):/workspace \
                                 -w /workspace \
-                                -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-                                -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
                                 -e AWS_DEFAULT_REGION=us-east-1 \
                                 hashicorp/terraform:latest apply -auto-approve
                         """
@@ -132,8 +132,8 @@ pipeline {
                 )]) {
                     sh """
                         docker run --rm \
-                            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-                            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
                             -e AWS_DEFAULT_REGION=us-east-1 \
                             amazon/aws-cli ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 227655494308.dkr.ecr.us-east-1.amazonaws.com
                         docker tag order-tracking-app:${BUILD_NUMBER} 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
