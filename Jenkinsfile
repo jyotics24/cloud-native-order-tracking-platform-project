@@ -112,23 +112,23 @@ pipeline {
         // 3. SonarCloud configured in Jenkins
         // 4. Sonar Scanner configured in Jenkins Tools
         // =====================================================
-        stage('Sonar Scan') {
-            steps {
+//        stage('Sonar Scan') {
+//            steps {
+//
+//                script {
+//
+//                    def scannerHome = tool 'sonar-scanner'
+//
+//                    withSonarQubeEnv('SonarCloud') {
+//
+//                        sh """
+//                            ${scannerHome}/bin/sonar-scanner
+//                        """
 
-                script {
-
-                    def scannerHome = tool 'sonar-scanner'
-
-                    withSonarQubeEnv('SonarCloud') {
-
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner
-                        """
-
-                    }
-                }
-            }
-        }
+//                    }
+//                }
+//            }
+//        }
 
         // =====================================================
         // Stage 3: Docker Build
