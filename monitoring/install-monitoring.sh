@@ -16,6 +16,7 @@ echo "Installing kube-prometheus-stack..."
 
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
     --namespace monitoring \
-    -f values.yaml
+    -f monitoring/values.yaml \
+    --set grafana.adminPassword="${GRAFANA_ADMIN_PASSWORD}"
 
 echo "Monitoring installation completed."

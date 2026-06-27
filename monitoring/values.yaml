@@ -1,0 +1,11 @@
+grafana:
+  service:
+    type: LoadBalancer
+
+prometheus:
+  service:
+    type: ClusterIP
+
+alertmanager:
+  service:
+    type: ClusterIP

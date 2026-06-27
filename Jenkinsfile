@@ -181,6 +181,55 @@ pipeline {
                 }
             }
         }
+
+        // =====================================================
+        // 8. INSTALL MONITORING (PROMETHEUS + GRAFANA)
+        // Installs/upgrades kube-prometheus-stack via Helm
+        // Runs after every successful EKS deployment
+        // =====================================================
+        stage("Install Monitoring") {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr'],
+                    string(credentialsId: 'grafana-admin-password', variable: 'GRAFANA_ADMIN_PASSWORD')
+                ]) {
+                    sh """
+                        set -e
+
+                        docker run --rm \
+                            -v \$(pwd):/workspace \
+                            -w /workspace \
+                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                            -e AWS_DEFAULT_REGION=us-east-1 \
+                            -e GRAFANA_ADMIN_PASSWORD=\$GRAFANA_ADMIN_PASSWORD \
+                            --entrypoint /bin/sh \
+                            amazon/aws-cli -c "
+                                set -e
+
+                                # aws-cli is already present in this base image (same one used
+                                # in the Deploy to EKS stage). kubectl and helm are not, so
+                                # install both explicitly - same pattern as Deploy to EKS stage.
+
+                                curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+                                chmod +x kubectl
+                                mv kubectl /usr/local/bin/kubectl
+
+                                curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+                                chmod +x get_helm.sh
+                                ./get_helm.sh --version v3.16.0
+
+                                # Configure kubeconfig for EKS
+                                aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
+
+                                # Run the monitoring install script
+                                chmod +x monitoring/install-monitoring.sh
+                                ./monitoring/install-monitoring.sh
+                            "
+                    """
+                }
+            }
+        }
     }
 
     // =====================================================
