@@ -214,7 +214,7 @@ pipeline {
 
                                 # Install openssl - required by get_helm.sh to verify checksum
                                 # (yum or microdnf, depending on base image version)
-                                (yum install -y openssl -q 2>/dev/null) || (microdnf install -y openssl 2>/dev/null) || true
+                                (yum install -y openssl tar gzip -q 2>/dev/null) || (microdnf install -y openssl tar gzip 2>/dev/null) || true
 
                                 curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
                                 chmod +x kubectl
