@@ -1,0 +1,234 @@
+/* ==========================================================
+   Cloud-Native Order Tracking Platform
+   style.css
+========================================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+    background: #f4f7fb;
+    color: #333;
+}
+
+/* ===========================
+   Header
+=========================== */
+
+header {
+    background: #1f4e79;
+    color: white;
+    padding: 20px 40px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+header h1 {
+    font-size: 28px;
+}
+
+/* ===========================
+   Health Badge
+=========================== */
+
+.health-badge {
+
+    padding: 10px 18px;
+
+    border-radius: 25px;
+
+    font-weight: bold;
+
+    font-size: 14px;
+}
+
+.healthy {
+
+    background: #28a745;
+    color: white;
+}
+
+.unhealthy {
+
+    background: #dc3545;
+    color: white;
+}
+
+/* ===========================
+   Main Layout
+=========================== */
+
+main {
+
+    width: 90%;
+
+    max-width: 900px;
+
+    margin: 40px auto;
+}
+
+/* ===========================
+   Cards
+=========================== */
+
+.card {
+
+    background: white;
+
+    margin-bottom: 25px;
+
+    padding: 25px;
+
+    border-radius: 12px;
+
+    box-shadow: 0 5px 15px rgba(0,0,0,.08);
+}
+
+.card h2 {
+
+    color: #1f4e79;
+
+    margin-bottom: 20px;
+}
+
+/* ===========================
+   Button
+=========================== */
+
+button {
+
+    background: #1f4e79;
+
+    color: white;
+
+    border: none;
+
+    padding: 12px 20px;
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+    transition: .3s;
+}
+
+button:hover {
+
+    background: #163b5c;
+}
+
+/* ===========================
+   Input
+=========================== */
+
+input {
+
+    padding: 11px;
+
+    width: 220px;
+
+    border-radius: 6px;
+
+    border: 1px solid #ccc;
+
+    margin-right: 10px;
+}
+
+/* ===========================
+   Table
+=========================== */
+
+table {
+
+    width: 100%;
+
+    margin-top: 20px;
+
+    border-collapse: collapse;
+}
+
+thead {
+
+    background: #1f4e79;
+
+    color: white;
+}
+
+th,
+td {
+
+    padding: 12px;
+
+    border: 1px solid #ddd;
+
+    text-align: center;
+}
+
+tbody tr:nth-child(even) {
+
+    background: #f8f8f8;
+}
+
+/* ===========================
+   Results
+=========================== */
+
+#create-result,
+#track-result {
+
+    margin-top: 15px;
+
+    font-weight: bold;
+}
+
+/* ===========================
+   Footer
+=========================== */
+
+footer {
+
+    text-align: center;
+
+    margin: 40px 0;
+
+    color: #666;
+
+    font-size: 14px;
+}
+
+/* ===========================
+   Mobile
+=========================== */
+
+@media (max-width:768px){
+
+    header{
+
+        flex-direction:column;
+
+        gap:15px;
+
+        text-align:center;
+    }
+
+    input{
+
+        width:100%;
+
+        margin-bottom:10px;
+    }
+
+    button{
+
+        width:100%;
+    }
+
+}

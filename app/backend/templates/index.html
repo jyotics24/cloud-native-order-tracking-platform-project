@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Cloud-Native Order Tracking Platform</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <header>
+
+        <h1> Cloud-Native Order Tracking Platform</h1>
+
+        <div id="health-status" class="health-badge">
+            Checking Backend...
+        </div>
+
+    </header>
+
+    <main>
+
+        <!-- ============================= -->
+        <!-- Create Order -->
+        <!-- ============================= -->
+
+        <section class="card">
+
+            <h2>Create New Order</h2>
+
+            <button id="create-order-btn">
+                Create Order
+            </button>
+
+            <p id="create-result"></p>
+
+        </section>
+
+
+        <!-- ============================= -->
+        <!-- Track Order -->
+        <!-- ============================= -->
+
+        <section class="card">
+
+            <h2>Track Order</h2>
+
+            <input
+                type="number"
+                id="track-order-id"
+                placeholder="Enter Order ID"
+                min="1">
+
+            <button id="track-order-btn">
+                Track Order
+            </button>
+
+            <p id="track-result"></p>
+
+        </section>
+
+
+        <!-- ============================= -->
+        <!-- Orders -->
+        <!-- ============================= -->
+
+        <section class="card">
+
+            <h2>All Orders</h2>
+
+            <button id="refresh-orders-btn">
+                Refresh Orders
+            </button>
+
+            <table id="orders-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Order ID</th>
+
+                        <th>Status</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="orders-table-body">
+
+                </tbody>
+
+            </table>
+
+        </section>
+
+    </main>
+
+    <footer>
+
+        <p>
+
+            Cloud-Native Order Tracking Platform
+
+            <br>
+
+            Flask • Docker • Kubernetes • Jenkins • Terraform • AWS EKS
+
+        </p>
+
+    </footer>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+
+</html>
