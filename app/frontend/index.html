@@ -1,0 +1,51 @@
+<!-- index.html -->
+<!-- Simple frontend for the order tracking platform. -->
+<!-- Talks directly to the Flask backend API (no framework, no build step). -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Order Tracking Platform</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Order Tracking Platform</h1>
+        <div id="health-status" class="health-badge">Checking backend...</div>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>Create New Order</h2>
+            <button id="create-order-btn">Create Order</button>
+            <p id="create-result"></p>
+        </section>
+
+        <section class="card">
+            <h2>Track an Order</h2>
+            <input type="number" id="track-order-id" placeholder="Enter Order ID" min="1">
+            <button id="track-order-btn">Track</button>
+            <p id="track-result"></p>
+        </section>
+
+        <section class="card">
+            <h2>All Orders</h2>
+            <button id="refresh-orders-btn">Refresh List</button>
+            <table id="orders-table">
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-table-body">
+                    <!-- Rows inserted here by script.js -->
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
