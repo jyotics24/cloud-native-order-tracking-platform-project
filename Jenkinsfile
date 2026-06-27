@@ -31,7 +31,9 @@ pipeline {
                         python3 -m venv venv
                         . venv/bin/activate
                         pip install -r requirements.txt
-                        pytest test_app.py -v
+                        pip install pytest pytest-cov
+
+                        pytest --cov=. --cov-report=xml test_app.py -v
                     '''
                 }
             }
