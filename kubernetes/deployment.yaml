@@ -1,0 +1,47 @@
+# deployment.yaml
+# Defines how the order-tracking-app runs on the EKS cluster.
+# Creates 2 replicas (copies) of the app for basic availability -
+# if one pod crashes, the other keeps serving traffic.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-tracking-app
+  labels:
+    app: order-tracking-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-tracking-app
+  template:
+    metadata:
+      labels:
+        app: order-tracking-app
+    spec:
+      containers:
+        - name: order-tracking-app
+          # Image gets set dynamically by Jenkins at deploy time
+          # (replaced with the actual ECR image + build tag)
+          image: IMAGE_PLACEHOLDER
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10

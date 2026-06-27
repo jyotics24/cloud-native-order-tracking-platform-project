@@ -1,0 +1,16 @@
+# service.yaml
+# Exposes the order-tracking-app deployment to the internet
+# using an AWS Network Load Balancer (type: LoadBalancer).
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-tracking-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: order-tracking-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
