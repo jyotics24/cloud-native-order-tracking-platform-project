@@ -8,6 +8,9 @@
 // 2. SonarCloud Scan
 // 3. Docker Build
 // 4. Trivy Security Scan
+// 5. Terraform Apply (ECR + EKS app infra)
+// 6. Push to ECR
+// 7. Deploy to EKS
 //
 // If any stage fails, Jenkins stops the pipeline.
 // =====================================================
@@ -65,11 +68,6 @@ pipeline {
         // =====================================================
         // Stage 4: Trivy Security Scan
         // =====================================================
-        // Scans the built Docker image for known
-        // vulnerabilities (CVEs) in OS packages and
-        // language dependencies. exit-code 0 means it
-        // reports findings without failing the build yet.
-        // =====================================================
         stage('Trivy Scan') {
             steps {
                 sh """
@@ -79,32 +77,26 @@ pipeline {
         }
 
         // =====================================================
-        // Stage 5: Terraform Apply (App Infra - ECR)
-        // =====================================================
-        // Runs Terraform inside an official HashiCorp Docker
-        // image to create/update the ECR repository. This is a
-        // SEPARATE Terraform state from the Jenkins EC2 itself,
-        // so this stage can never modify or destroy the server
-        // it's running on.
+        // Stage 5: Terraform Apply (ECR + EKS app infra)
         // =====================================================
         stage("Terraform Apply - ECR") {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
                     dir("terraform-app") {
                         sh """
-                            docker run --rm \
-                                -v \$(pwd):/workspace \
-                                -w /workspace \
-                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                                -e AWS_DEFAULT_REGION=us-east-1 \
+                            docker run --rm \\
+                                -v \$(pwd):/workspace \\
+                                -w /workspace \\
+                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \\
+                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \\
+                                -e AWS_DEFAULT_REGION=us-east-1 \\
                                 hashicorp/terraform:latest init
-                            docker run --rm \
-                                -v \$(pwd):/workspace \
-                                -w /workspace \
-                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                                -e AWS_DEFAULT_REGION=us-east-1 \
+                            docker run --rm \\
+                                -v \$(pwd):/workspace \\
+                                -w /workspace \\
+                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \\
+                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \\
+                                -e AWS_DEFAULT_REGION=us-east-1 \\
                                 hashicorp/terraform:latest apply -auto-approve
                         """
                     }
@@ -113,23 +105,53 @@ pipeline {
         }
 
         // =====================================================
-        // Stage 6: Push Image to ECR
-        // =====================================================
-        // Authenticates Docker to ECR using the AWS CLI, then
-        // tags and pushes the image built earlier in the
-        // pipeline to the ECR repository created above.
+        // Stage 6: Push to ECR
         // =====================================================
         stage("Push to ECR") {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
                     sh """
-                        docker run --rm \
-                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                            -e AWS_DEFAULT_REGION=us-east-1 \
+                        docker run --rm \\
+                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \\
+                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \\
+                            -e AWS_DEFAULT_REGION=us-east-1 \\
                             amazon/aws-cli ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 227655494308.dkr.ecr.us-east-1.amazonaws.com
                         docker tag order-tracking-app:${BUILD_NUMBER} 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
                         docker push 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
+                    """
+                }
+            }
+        }
+
+        // =====================================================
+        // Stage 7: Deploy to EKS
+        // =====================================================
+        // Updates kubeconfig to point at the EKS cluster, then
+        // applies the deployment + service manifests, substituting
+        // the placeholder image with the real ECR image just pushed.
+        // Uses a kubectl Docker image since kubectl isn't installed
+        // directly on the Jenkins EC2.
+        // =====================================================
+        stage("Deploy to EKS") {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
+                    sh """
+                        sed 's|IMAGE_PLACEHOLDER|227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}|' kubernetes/deployment.yaml > kubernetes/deployment-final.yaml
+
+                        docker run --rm \\
+                            -v \$(pwd)/kubernetes:/manifests \\
+                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \\
+                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \\
+                            -e AWS_DEFAULT_REGION=us-east-1 \\
+                            --entrypoint /bin/sh \\
+                            amazon/aws-cli -c "
+                                yum install -y unzip curl >/dev/null 2>&1 || true
+                                curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+                                chmod +x kubectl
+                                aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
+                                ./kubectl apply -f /manifests/deployment-final.yaml
+                                ./kubectl apply -f /manifests/service.yaml
+                            "
                     """
                 }
             }
