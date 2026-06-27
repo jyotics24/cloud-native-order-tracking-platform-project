@@ -34,7 +34,7 @@ resource "aws_eks_node_group" "order_tracking_nodes" {
 
   # Small, cost-conscious node group: 1-2 t3.small nodes
   scaling_config {
-    desired_size = 1
+    desired_size = 2
     max_size     = 2
     min_size     = 1
   }
