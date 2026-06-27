@@ -186,6 +186,7 @@ pipeline {
         // 8. INSTALL MONITORING (PROMETHEUS + GRAFANA)
         // Installs/upgrades kube-prometheus-stack via Helm
         // Runs after every successful EKS deployment
+        // FIXED: install openssl before helm installer (checksum verify)
         // =====================================================
         stage("Install Monitoring") {
             steps {
@@ -210,6 +211,10 @@ pipeline {
                                 # aws-cli is already present in this base image (same one used
                                 # in the Deploy to EKS stage). kubectl and helm are not, so
                                 # install both explicitly - same pattern as Deploy to EKS stage.
+
+                                # Install openssl - required by get_helm.sh to verify checksum
+                                # (yum or microdnf, depending on base image version)
+                                (yum install -y openssl -q 2>/dev/null) || (microdnf install -y openssl 2>/dev/null) || true
 
                                 curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
                                 chmod +x kubectl
