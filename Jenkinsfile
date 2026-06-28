@@ -5,7 +5,7 @@ pipeline {
     // =====================================================
     agent any
 
-    // Global pipeline environment variables for dynamic notifications
+    // Initialize global pipeline environment variables
     environment {
         APP_URL      = ''
         GRAFANA_URL  = ''
@@ -15,7 +15,6 @@ pipeline {
 
         // =====================================================
         // 1. UNIT TESTING STAGE
-        // Runs Python unit tests with coverage reporting
         // =====================================================
         stage('Unit Testing') {
             steps {
@@ -23,12 +22,8 @@ pipeline {
                     sh '''
                         python3 -m venv venv
                         . venv/bin/activate
-
-                        # Install dependencies
                         pip install -r requirements.txt
                         pip install pytest pytest-cov
-
-                        # Run unit tests with coverage
                         pytest --cov=. --cov-report=xml test_app.py -v
                     '''
                 }
@@ -37,17 +32,13 @@ pipeline {
 
         // =====================================================
         // 2. SONARQUBE / SONARCLOUD ANALYSIS
-        // Static code quality and security analysis
         // =====================================================
         stage('Sonar Scan') {
             steps {
                 script {
                     def scannerHome = tool 'sonar-scanner'
-
                     withSonarQubeEnv('SonarCloud') {
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner
-                        """
+                        sh "${scannerHome}/bin/sonar-scanner"
                     }
                 }
             }
@@ -55,14 +46,11 @@ pipeline {
 
         // =====================================================
         // 3. DOCKER IMAGE BUILD
-        // Builds and tags Docker image locally
         // =====================================================
         stage('Docker Build') {
             steps {
                 sh """
                     docker build -t order-tracking-app:${BUILD_NUMBER} .
-
-                    # Also tag latest for convenience
                     docker tag order-tracking-app:${BUILD_NUMBER} order-tracking-app:latest
                 """
             }
@@ -70,26 +58,20 @@ pipeline {
 
         // =====================================================
         // 4. TRIVY SECURITY SCAN
-        // Scans Docker image for vulnerabilities (HIGH/CRITICAL)
         // =====================================================
         stage('Trivy Scan') {
             steps {
-                sh """
-                    trivy image --severity CRITICAL,HIGH --exit-code 0 order-tracking-app:${BUILD_NUMBER}
-                """
+                sh "trivy image --severity CRITICAL,HIGH --exit-code 0 order-tracking-app:${BUILD_NUMBER}"
             }
         }
 
         // =====================================================
         // 5. TERRAFORM INFRASTRUCTURE DEPLOYMENT
-        // Creates/updates AWS ECR and EKS infrastructure
         // =====================================================
         stage("Terraform Apply - ECR") {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
                     dir("terraform-app") {
-
-                        // Initialize Terraform
                         sh """
                             docker run --rm \
                                 -v \$(pwd):/workspace \
@@ -98,10 +80,7 @@ pipeline {
                                 -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
                                 -e AWS_DEFAULT_REGION=us-east-1 \
                                 hashicorp/terraform:latest init
-                        """
 
-                        // Apply Terraform configuration
-                        sh """
                             docker run --rm \
                                 -v \$(pwd):/workspace \
                                 -w /workspace \
@@ -117,13 +96,11 @@ pipeline {
 
         // =====================================================
         // 6. PUSH DOCKER IMAGE TO AWS ECR
-        // Authenticates and pushes image to container registry
         // =====================================================
         stage("Push to ECR") {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
                     sh """
-                        # Login to AWS ECR
                         docker run --rm \
                             -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
                             -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
@@ -131,10 +108,7 @@ pipeline {
                             amazon/aws-cli ecr get-login-password --region us-east-1 | \
                             docker login --username AWS --password-stdin 227655494308.dkr.ecr.us-east-1.amazonaws.com
 
-                        # Tag image for ECR
                         docker tag order-tracking-app:${BUILD_NUMBER} 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
-
-                        # Push image to ECR
                         docker push 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
                     """
                 }
@@ -143,8 +117,7 @@ pipeline {
 
         // =====================================================
         // 7. DEPLOY TO AWS EKS
-        // Deploy Kubernetes manifests using kubectl
-        // FIXED: Explicit workspace persistence tracking using absolute volume paths
+        // FIXED: Using direct environment context injection to lock var mutations
         // =====================================================
         stage("Deploy to EKS") {
             steps {
@@ -157,7 +130,6 @@ pipeline {
                             grep -q '227655494308' kubernetes/deployment-final.yaml || (echo 'ERROR: sed replace failed' && exit 1)
                         """
 
-                        // Standard execution block allowing full streaming logs to hit console output natively
                         sh '''
                             docker run --rm \
                                 -v $(pwd):/workspace \
@@ -181,7 +153,6 @@ pipeline {
                                     ./kubectl get svc
                                     ./kubectl get svc order-tracking-service -o wide
                                     
-                                    # Polling loop verifying AWS ELB mapping status
                                     HOSTNAME=""
                                     i=1
                                     while [ $i -le 20 ]; do
@@ -193,17 +164,19 @@ pipeline {
                                         sleep 10
                                     done
                                     
-                                    # FIXED: Written to explicit absolute mount destination to prevent folder routing anomalies
                                     echo "$HOSTNAME" > /workspace/app_endpoint.txt
                                 '
                         '''
 
-                        // Verification steps executing directly on host workspace context
                         echo "===== HOST PERSISTENCE VERIFICATION (APP) ====="
                         sh 'ls -l app_endpoint.txt'
                         sh 'cat app_endpoint.txt'
 
-                        env.APP_URL = readFile('app_endpoint.txt').trim()
+                        // FIXED: Global assignment via explicitly qualified env context overrides the declarative sandbox lock
+                        String appUrlContent = readFile('app_endpoint.txt').trim()
+                        sh "echo 'Raw read check: ${appUrlContent}'"
+                        
+                        env.setProperty("APP_URL", appUrlContent)
                         echo "Successfully captured APP_URL: ${env.APP_URL}"
                     }
                 }
@@ -212,8 +185,7 @@ pipeline {
 
         // =====================================================
         // 8. INSTALL MONITORING (PROMETHEUS + GRAFANA)
-        // Installs/upgrades kube-prometheus-stack via Helm
-        // FIXED: Explicit workspace persistence tracking using absolute volume paths
+        // FIXED: Using direct environment context injection to lock var mutations
         // =====================================================
         stage("Install Monitoring") {
             steps {
@@ -222,7 +194,6 @@ pipeline {
                     string(credentialsId: 'grafana-admin-password', variable: 'GRAFANA_ADMIN_PASSWORD')
                 ]) {
                     script {
-                        // Standard execution block allowing full streaming logs to hit console output natively
                         sh '''
                             docker run --rm \
                                 -v $(pwd):/workspace \
@@ -250,7 +221,6 @@ pipeline {
                                     /usr/local/bin/kubectl get svc -n monitoring
                                     /usr/local/bin/kubectl get svc prometheus-grafana -n monitoring -o wide
                                     
-                                    # Polling loop verifying AWS ELB mapping status
                                     HOSTNAME=""
                                     i=1
                                     while [ $i -le 20 ]; do
@@ -262,17 +232,19 @@ pipeline {
                                         sleep 10
                                     done
                                     
-                                    # FIXED: Written to explicit absolute mount destination to prevent folder routing anomalies
                                     echo "$HOSTNAME" > /workspace/grafana_endpoint.txt
                                 '
                         '''
 
-                        // Verification steps executing directly on host workspace context
                         echo "===== HOST PERSISTENCE VERIFICATION (GRAFANA) ====="
                         sh 'ls -l grafana_endpoint.txt'
                         sh 'cat grafana_endpoint.txt'
 
-                        env.GRAFANA_URL = readFile('grafana_endpoint.txt').trim()
+                        // FIXED: Global assignment via explicitly qualified env context overrides the declarative sandbox lock
+                        String grafanaUrlContent = readFile('grafana_endpoint.txt').trim()
+                        sh "echo 'Raw read check: ${grafanaUrlContent}'"
+                        
+                        env.setProperty("GRAFANA_URL", grafanaUrlContent)
                         echo "Successfully captured GRAFANA_URL: ${env.GRAFANA_URL}"
                     }
                 }
@@ -282,7 +254,6 @@ pipeline {
 
     // =====================================================
     // POST ACTIONS (SLACK NOTIFICATIONS)
-    // Runs after pipeline execution regardless of result
     // =====================================================
     post {
 
@@ -290,12 +261,8 @@ pipeline {
             echo 'Pipeline finished. Check logs for details.'
         }
 
-        // =====================================================
-        // SUCCESS NOTIFICATION (SLACK)
-        // =====================================================
         success {
             echo 'Pipeline completed successfully.'
-
             script {
                 try {
                     withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
@@ -313,12 +280,8 @@ pipeline {
             }
         }
 
-        // =====================================================
-        // FAILURE NOTIFICATION (SLACK)
-        // =====================================================
         failure {
             echo 'Pipeline failed. Check logs.'
-
             script {
                 try {
                     withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
