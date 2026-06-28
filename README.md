@@ -1,13 +1,18 @@
 # Cloud-Native Order Tracking Platform
 
-## Overview
+> End-to-end production-style DevOps project demonstrating CI/CD,
+> Infrastructure as Code, Kubernetes deployment, monitoring, and
+> security on AWS.
 
-A production-style cloud-native DevOps project that demonstrates an
-end-to-end CI/CD pipeline for deploying a containerized Order Tracking
-application on Amazon EKS using Jenkins, Terraform, Docker, Kubernetes,
-SonarCloud, Trivy, Prometheus, Grafana, and Slack notifications.
+## 📖 Overview
 
-## Architecture
+This project automates the complete software delivery lifecycle for a
+containerized Order Tracking application. A GitHub push triggers a
+Jenkins pipeline that performs testing, code quality analysis, security
+scanning, infrastructure provisioning, container deployment to Amazon
+EKS, monitoring installation, and Slack notifications.
+
+## 🏗️ Architecture
 
 ``` text
 Developer
@@ -29,32 +34,32 @@ Jenkins Pipeline
     ├── Deploy to Amazon EKS
     ├── Install Prometheus & Grafana
     └── Slack Notification
-                     │
-                     ▼
-              Amazon EKS Cluster
-                 ├── Order Tracking App
-                 ├── Prometheus
-                 ├── Grafana
-                 └── Kubernetes Services
+                    │
+                    ▼
+             Amazon EKS Cluster
+              ├── Order Tracking App
+              ├── Prometheus
+              ├── Grafana
+              └── Kubernetes Services
 ```
 
-## Features
+## ✨ Features
 
 -   Automated CI/CD with Jenkins
 -   GitHub Webhook integration
--   Docker containerization
 -   Infrastructure as Code using Terraform
--   Amazon ECR image registry
+-   Docker containerization
+-   Amazon ECR image management
 -   Amazon EKS deployment
 -   Kubernetes rolling updates
 -   Pytest unit testing
 -   SonarCloud static code analysis
--   Trivy image vulnerability scanning
+-   Trivy vulnerability scanning
 -   Prometheus monitoring
 -   Grafana dashboards
 -   Slack build notifications
 
-## Technology Stack
+## 🛠️ Technology Stack
 
   Category        Technologies
   --------------- -------------------------
@@ -64,14 +69,14 @@ Jenkins Pipeline
   Containers      Docker
   Orchestration   Kubernetes (Amazon EKS)
   Registry        Amazon ECR
-  Language        Python, Flask
+  Backend         Python, Flask
   Testing         Pytest
   Code Quality    SonarCloud
   Security        Trivy
   Monitoring      Prometheus, Grafana
   Notifications   Slack
 
-## Repository Structure
+## 📂 Repository Structure
 
 ``` text
 .
@@ -89,48 +94,55 @@ Jenkins Pipeline
 └── README.md
 ```
 
-## Jenkins Pipeline
+## 🔄 Jenkins Pipeline
 
 1.  Unit Testing
 2.  SonarCloud Scan
 3.  Docker Build
-4.  Trivy Scan
+4.  Trivy Security Scan
 5.  Terraform Apply
-6.  Push Image to Amazon ECR
-7.  Deploy to Amazon EKS
+6.  Push Docker Image to Amazon ECR
+7.  Deploy Application to Amazon EKS
 8.  Install Prometheus & Grafana
-9.  Slack Notification
+9.  Send Slack Notification
 
-## Monitoring
+## 📊 Monitoring
 
-### Prometheus
+-   **Prometheus** collects Kubernetes metrics.
+-   **Grafana** visualizes infrastructure and application metrics.
 
-Collects Kubernetes cluster metrics.
+## 🔐 Security
 
-### Grafana
+-   SonarCloud code quality analysis
+-   Trivy image vulnerability scanning
+-   Jenkins Credentials for secrets management
 
-Visualizes metrics through dashboards.
+<!-- ## 📸 Suggested Screenshots
 
-## Security
+-   Jenkins Pipeline Success
+-   SonarCloud Dashboard
+-   Trivy Scan Output
+-   Amazon ECR Repository
+-   Amazon EKS Workloads
+-   Grafana Dashboard
+-   Prometheus Targets
+-   Slack Notifications -->
 
--   SonarCloud code quality checks
--   Trivy container image scanning
--   AWS IAM credentials managed through Jenkins Credentials
-
-## Future Improvements
+## 🚀 Future Improvements
 
 -   Cluster Autoscaler
 -   Horizontal Pod Autoscaler
--   HTTPS with ACM and Route 53
 -   Fluent Bit + CloudWatch Logs
+-   HTTPS with ACM & Route 53
 -   GitOps using Argo CD
 
-## Author
+## 👤 Author
 
 **Jyotiprakash Khuntia**
 
 DevOps Engineer
 
-## License
+## 📄 License
 
-This project is for learning and portfolio purposes.
+This repository is intended for learning, demonstration, and portfolio
+purposes.

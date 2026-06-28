@@ -5,6 +5,12 @@ pipeline {
     // =====================================================
     agent any
 
+    // Global variables to store endpoints and pass them to the post block
+    environment {
+        APP_URL      = ''
+        GRAFANA_URL  = ''
+    }
+
     stages {
 
         // =====================================================
@@ -139,45 +145,53 @@ pipeline {
         // 7. DEPLOY TO AWS EKS
         // Deploy Kubernetes manifests using kubectl
         // FIXED: set -e, sed-verify check, rollout status check
+        // OPTIMIZED: Captures APP_URL during runtime context
         // =====================================================
         stage("Deploy to EKS") {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr']]) {
-                    sh """
-                        set -e
+                    script {
+                        sh """
+                            set -e
 
-                        # Replace image tag in deployment file
-                        sed 's|IMAGE_PLACEHOLDER|227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}|' \
-                        kubernetes/deployment.yaml > kubernetes/deployment-final.yaml
+                            # Replace image tag in deployment file
+                            sed 's|IMAGE_PLACEHOLDER|227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}|' \
+                            kubernetes/deployment.yaml > kubernetes/deployment-final.yaml
 
-                        # Verify sed actually replaced the placeholder (fail fast if not)
-                        grep -q '227655494308' kubernetes/deployment-final.yaml || (echo 'ERROR: sed replace failed, IMAGE_PLACEHOLDER not found' && exit 1)
+                            # Verify sed actually replaced the placeholder (fail fast if not)
+                            grep -q '227655494308' kubernetes/deployment-final.yaml || (echo 'ERROR: sed replace failed, IMAGE_PLACEHOLDER not found' && exit 1)
+                        """
 
-                        # Run kubectl inside container
-                        docker run --rm \
-                            -v \$(pwd)/kubernetes:/manifests \
-                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                            -e AWS_DEFAULT_REGION=us-east-1 \
-                            --entrypoint /bin/sh \
-                            amazon/aws-cli -c "
-                                set -e
+                        // Run kubectl deployment and capture endpoint info cleanly
+                        def fetchedAppUrl = sh(
+                            returnStdout: true,
+                            script: """
+                                docker run --rm \
+                                    -v \$(pwd)/kubernetes:/manifests \
+                                    -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                                    -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                                    -e AWS_DEFAULT_REGION=us-east-1 \
+                                    --entrypoint /bin/sh \
+                                    amazon/aws-cli -c "
+                                        set -e
+                                        curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl > /dev/null 2>&1
+                                        chmod +x kubectl
+                                        
+                                        # FIXED: Corrected execution from local path to global 'aws' binary
+                                        aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks > /dev/null 2>&1
 
-                                # Download kubectl
-                                curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
-                                chmod +x kubectl
+                                        ./kubectl apply -f /manifests/deployment-final.yaml
+                                        ./kubectl apply -f /manifests/service.yaml
+                                        ./kubectl rollout status deployment/order-tracking-app --timeout=120s
 
-                                # Configure kubeconfig for EKS
-                                aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
+                                        # Fetch endpoint while cluster context is valid
+                                        ./kubectl get svc order-tracking-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                                    "
+                            """
+                        ).trim()
 
-                                # Deploy application
-                                ./kubectl apply -f /manifests/deployment-final.yaml
-                                ./kubectl apply -f /manifests/service.yaml
-
-                                # Wait for rollout to confirm pods actually came up healthy
-                                ./kubectl rollout status deployment/order-tracking-app --timeout=120s
-                            "
-                    """
+                        env.APP_URL = fetchedAppUrl
+                    }
                 }
             }
         }
@@ -185,8 +199,7 @@ pipeline {
         // =====================================================
         // 8. INSTALL MONITORING (PROMETHEUS + GRAFANA)
         // Installs/upgrades kube-prometheus-stack via Helm
-        // Runs after every successful EKS deployment
-        // FIXED: install openssl before helm installer (checksum verify)
+        // OPTIMIZED: Captures GRAFANA_URL during runtime context
         // =====================================================
         stage("Install Monitoring") {
             steps {
@@ -194,44 +207,44 @@ pipeline {
                     [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-jenkins-ecr'],
                     string(credentialsId: 'grafana-admin-password', variable: 'GRAFANA_ADMIN_PASSWORD')
                 ]) {
-                    sh """
-                        set -e
+                    script {
+                        def fetchedGrafanaUrl = sh(
+                            returnStdout: true,
+                            script: """
+                                docker run --rm \
+                                    -v \$(pwd):/workspace \
+                                    -w /workspace \
+                                    -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                                    -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                                    -e AWS_DEFAULT_REGION=us-east-1 \
+                                    -e GRAFANA_ADMIN_PASSWORD=\$GRAFANA_ADMIN_PASSWORD \
+                                    --entrypoint /bin/sh \
+                                    amazon/aws-cli -c "
+                                        set -e
+                                        (yum install -y openssl tar gzip -q 2>/dev/null) || (microdnf install -y openssl tar gzip 2>/dev/null) || true
 
-                        docker run --rm \
-                            -v \$(pwd):/workspace \
-                            -w /workspace \
-                            -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                            -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                            -e AWS_DEFAULT_REGION=us-east-1 \
-                            -e GRAFANA_ADMIN_PASSWORD=\$GRAFANA_ADMIN_PASSWORD \
-                            --entrypoint /bin/sh \
-                            amazon/aws-cli -c "
-                                set -e
+                                        curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl > /dev/null 2>&1
+                                        chmod +x kubectl
+                                        mv kubectl /usr/local/bin/kubectl
 
-                                # aws-cli is already present in this base image (same one used
-                                # in the Deploy to EKS stage). kubectl and helm are not, so
-                                # install both explicitly - same pattern as Deploy to EKS stage.
+                                        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 > /dev/null 2>&1
+                                        chmod +x get_helm.sh
+                                        ./get_helm.sh --version v3.16.0 > /dev/null 2>&1
 
-                                # Install openssl - required by get_helm.sh to verify checksum
-                                # (yum or microdnf, depending on base image version)
-                                (yum install -y openssl tar gzip -q 2>/dev/null) || (microdnf install -y openssl tar gzip 2>/dev/null) || true
+                                        # FIXED: Corrected execution from local path to global 'aws' binary
+                                        aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks > /dev/null 2>&1
 
-                                curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
-                                chmod +x kubectl
-                                mv kubectl /usr/local/bin/kubectl
+                                        chmod +x monitoring/install-monitoring.sh
+                                        ./monitoring/install-monitoring.sh
 
-                                curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-                                chmod +x get_helm.sh
-                                ./get_helm.sh --version v3.16.0
+                                        # Fetch endpoint while cluster context is valid
+                                        /usr/local/bin/kubectl get svc prometheus-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                                    "
+                            """
+                        ).trim()
 
-                                # Configure kubeconfig for EKS
-                                aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
-
-                                # Run the monitoring install script
-                                chmod +x monitoring/install-monitoring.sh
-                                ./monitoring/install-monitoring.sh
-                            "
-                    """
+                        env.GRAFANA_URL = fetchedGrafanaUrl
+                    }
                 }
             }
         }
@@ -243,13 +256,13 @@ pipeline {
     // =====================================================
     post {
 
-        // Always executed regardless of success/failure
         always {
             echo 'Pipeline finished. Check logs for details.'
         }
 
         // =====================================================
         // SUCCESS NOTIFICATION (SLACK)
+        // FIXED: Complex container calls removed, utilizes simple environment injection
         // =====================================================
         success {
             echo 'Pipeline completed successfully.'
@@ -261,7 +274,7 @@ pipeline {
                             curl --fail -X POST "\$SLACK_WEBHOOK" \
                             -H "Content-Type: application/json" \
                             -d '{
-                                "text":"✅ Jenkins Build Successful\\nProject: Cloud-Native Order Tracking Platform\\nBuild: #${BUILD_NUMBER}\\nJob: ${JOB_NAME}\\nStatus: SUCCESS\\nURL: ${BUILD_URL}"
+                                "text":"🎉 *Jenkins Pipeline Successful*\\n\\nProject: Cloud-Native Order Tracking Platform\\n\\n🚀 Build: #${BUILD_NUMBER}\\n📦 Job: ${JOB_NAME}\\n\\n🌐 Application:\\nhttp://${env.APP_URL}\\n\\n❤️ Health Check:\\nhttp://${env.APP_URL}/health\\n\\n📊 Grafana Dashboard:\\nhttp://${env.GRAFANA_URL}\\n\\n🔗 Jenkins Build:\\n${BUILD_URL}\\n\\nStatus: SUCCESS"
                             }'
                         """
                     }
