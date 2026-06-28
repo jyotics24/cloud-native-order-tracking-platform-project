@@ -1,11 +1,11 @@
-def failedStage = 'Unknown / Checkout'
-
 pipeline {
 
-    // =====================================================
-    // Jenkins agent (runs on any available executor)
-    // =====================================================
     agent any
+
+    environment {
+        // Safe global tracking variable for clean failure reports
+        FAILED_STAGE_TRACKER = 'Unknown / Checkout'
+    }
 
     stages {
 
@@ -27,7 +27,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Unit Testing' }
+                    script { env.FAILED_STAGE_TRACKER = 'Unit Testing' }
                 }
             }
         }
@@ -46,23 +46,26 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Sonar Scan' }
+                    script { env.FAILED_STAGE_TRACKER = 'Sonar Scan' }
                 }
             }
         }
 
         // =====================================================
-        // =====================================================
-        // 2b. SONARCLOUD QUALITY GATE CHECK (informational only)
+        // 2b. SONARCLOUD QUALITY GATE CHECK (Informational)
         // =====================================================
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
                     script {
-                        def qg = waitForQualityGate abortPipeline: false
-                        echo "SonarCloud Quality Gate result: ${qg.status}"
-                        if (qg.status != 'OK') {
-                            echo "WARNING: Quality Gate did not pass (status: ${qg.status}). Continuing pipeline anyway — gate is informational while test coverage is being built up."
+                        try {
+                            def qg = waitForQualityGate abortPipeline: false
+                            echo "SonarCloud Quality Gate result: ${qg.status}"
+                            if (qg.status != 'OK') {
+                                echo "WARNING: Quality Gate did not pass (status: ${qg.status}). Continuing pipeline."
+                            }
+                        } catch (Exception e) {
+                            echo "Quality gate check encountered an error: ${e.message}"
                         }
                     }
                 }
@@ -81,7 +84,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Docker Build' }
+                    script { env.FAILED_STAGE_TRACKER = 'Docker Build' }
                 }
             }
         }
@@ -95,7 +98,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Trivy Scan' }
+                    script { env.FAILED_STAGE_TRACKER = 'Trivy Scan' }
                 }
             }
         }
@@ -129,7 +132,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Terraform Apply - ECR' }
+                    script { env.FAILED_STAGE_TRACKER = 'Terraform Apply - ECR' }
                 }
             }
         }
@@ -155,7 +158,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Push to ECR' }
+                    script { env.FAILED_STAGE_TRACKER = 'Push to ECR' }
                 }
             }
         }
@@ -236,7 +239,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Deploy to EKS' }
+                    script { env.FAILED_STAGE_TRACKER = 'Deploy to EKS' }
                 }
             }
         }
@@ -274,10 +277,6 @@ pipeline {
                                     chmod +x monitoring/install-monitoring.sh
                                     ./monitoring/install-monitoring.sh
                                     
-                                    echo "===== MONITORING SERVICE DEBUG ====="
-                                    /usr/local/bin/kubectl get svc -n monitoring
-                                    /usr/local/bin/kubectl get svc prometheus-grafana -n monitoring -o wide
-                                    
                                     HOSTNAME=""
                                     i=1
                                     while [ $i -le 20 ]; do
@@ -297,7 +296,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { failedStage = 'Install Monitoring' }
+                    script { env.FAILED_STAGE_TRACKER = 'Install Monitoring' }
                 }
             }
         }
@@ -305,19 +304,17 @@ pipeline {
 
     // =====================================================
     // POST ACTIONS (SLACK NOTIFICATIONS)
-    // FIXED: Files read directly inside the execution scope of post
     // =====================================================
     post {
 
         always {
-            echo 'Pipeline finished. Check logs for details.'
+            echo 'Pipeline finished. Evaluating notification parameters...'
         }
 
         success {
             echo 'Pipeline completed successfully.'
             script {
                 try {
-                    // Read the files directly inside the post-success scope to bypass declarative sandboxing
                     def finalAppUrl = readFile('app_endpoint.txt').trim()
                     def finalGrafanaUrl = readFile('grafana_endpoint.txt').trim()
 
@@ -340,14 +337,12 @@ pipeline {
             echo 'Pipeline failed. Check logs.'
             script {
                 try {
-                    def stageThatFailed = failedStage
-
                     withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
                         sh """
                             curl --fail -X POST "\$SLACK_WEBHOOK" \
                             -H "Content-Type: application/json" \
                             -d '{
-                                "text":"❌ *Jenkins Build Failed*\\n\\nProject: Cloud-Native Order Tracking Platform\\n\\n🚀 Build: #${BUILD_NUMBER}\\n📦 Job: ${JOB_NAME}\\n🛑 Failed at stage: *${stageThatFailed}*\\n\\n🔗 Jenkins Build:\\n${BUILD_URL}console\\n\\nStatus: FAILED"
+                                "text":"❌ *Jenkins Build Failed*\\n\\nProject: Cloud-Native Order Tracking Platform\\n\\n🚀 Build: #${BUILD_NUMBER}\\n📦 Job: ${JOB_NAME}\\n🛑 Failed at stage: *${env.FAILED_STAGE_TRACKER}*\\n\\n🔗 Jenkins Build:\\n${BUILD_URL}console\\n\\nStatus: FAILED"
                             }'
                         """
                     }
