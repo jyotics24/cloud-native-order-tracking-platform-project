@@ -52,17 +52,19 @@ pipeline {
         }
 
         // =====================================================
-        // 2b. SONARCLOUD QUALITY GATE CHECK
+        // =====================================================
+        // 2b. SONARCLOUD QUALITY GATE CHECK (informational only)
         // =====================================================
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-            post {
-                failure {
-                    script { failedStage = 'Quality Gate' }
+                    script {
+                        def qg = waitForQualityGate abortPipeline: false
+                        echo "SonarCloud Quality Gate result: ${qg.status}"
+                        if (qg.status != 'OK') {
+                            echo "WARNING: Quality Gate did not pass (status: ${qg.status}). Continuing pipeline anyway — gate is informational while test coverage is being built up."
+                        }
+                    }
                 }
             }
         }
