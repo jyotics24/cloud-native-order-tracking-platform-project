@@ -52,6 +52,22 @@ pipeline {
         }
 
         // =====================================================
+        // 2b. SONARCLOUD QUALITY GATE CHECK
+        // =====================================================
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+            post {
+                failure {
+                    script { failedStage = 'Quality Gate' }
+                }
+            }
+        }
+
+        // =====================================================
         // 3. DOCKER IMAGE BUILD
         // =====================================================
         stage('Docker Build') {
@@ -172,7 +188,7 @@ pipeline {
                                     
                                     ./kubectl apply -f kubernetes/deployment-final.yaml
                                     ./kubectl apply -f kubernetes/service.yaml
-                                    ./kubectl rollout status deployment/order-tracking-app --timeout=120s
+                                    ./kubectl rollout status deployment/order-tracking-app --timeout=300s
                                     
                                     echo "===== CLUSTER SERVICE DEBUG ====="
                                     ./kubectl get nodes
