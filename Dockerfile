@@ -9,7 +9,8 @@ WORKDIR /app
 
 COPY app/backend/requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY app/backend .
 

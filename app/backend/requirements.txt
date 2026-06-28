@@ -2,3 +2,5 @@ flask
 gunicorn
 pytest
 pytest-cov
+setuptools>=80.10.1
+wheel>=0.46.2
