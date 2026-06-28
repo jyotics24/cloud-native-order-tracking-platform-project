@@ -32,6 +32,12 @@ resource "aws_eks_node_group" "order_tracking_nodes" {
     aws_subnet.eks_private_2.id
   ]
 
+  # FIXED: Links the explicit security group policy down to the EC2 worker instances
+  remote_access {
+    ec2_ssh_key               = null
+    source_security_group_ids = [aws_security_group.eks_node_port_access.id]
+  }
+
   # Small, cost-conscious node group: 1-2 t3.small nodes
   scaling_config {
     desired_size = 2

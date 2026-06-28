@@ -152,16 +152,29 @@ resource "aws_route_table_association" "eks_private_2_assoc" {
 }
 
 # =========================================================================
-# NEW: Security Group Rule to Open NodePorts for External Load Balancers
+# FIXED: Dedicated Security Group for Managed Node Group Remote Access
 # =========================================================================
-resource "aws_security_group_rule" "allow_lb_to_nodes" {
-  type              = "ingress"
-  from_port         = 30000
-  to_port           = 32767
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "Allow inbound traffic from Load Balancers to EKS NodePorts"
-  
-  # Links dynamically to the auto-generated group created by your EKS resource
-  security_group_id = aws_eks_cluster.order_tracking_eks.vpc_config[0].cluster_security_group_id
+resource "aws_security_group" "eks_node_port_access" {
+  name        = "eks-node-port-access"
+  description = "Explicit network firewall routing override for NodePort allocations"
+  vpc_id      = aws_vpc.eks_vpc.id
+
+  ingress {
+    description = "Allow inbound Classic Load Balancer traffic to the Kubernetes NodePort allocation range"
+    from_port   = 30000
+    to_port     = 32767
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "eks-node-port-access-sg"
+  }
 }
