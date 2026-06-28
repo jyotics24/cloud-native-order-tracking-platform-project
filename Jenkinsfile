@@ -5,12 +5,6 @@ pipeline {
     // =====================================================
     agent any
 
-    // Initialize global pipeline environment variables
-    environment {
-        APP_URL      = ''
-        GRAFANA_URL  = ''
-    }
-
     stages {
 
         // =====================================================
@@ -117,7 +111,6 @@ pipeline {
 
         // =====================================================
         // 7. DEPLOY TO AWS EKS
-        // FIXED: Using direct environment context injection to lock var mutations
         // =====================================================
         stage("Deploy to EKS") {
             steps {
@@ -167,17 +160,6 @@ pipeline {
                                     echo "$HOSTNAME" > /workspace/app_endpoint.txt
                                 '
                         '''
-
-                        echo "===== HOST PERSISTENCE VERIFICATION (APP) ====="
-                        sh 'ls -l app_endpoint.txt'
-                        sh 'cat app_endpoint.txt'
-
-                        // FIXED: Global assignment via explicitly qualified env context overrides the declarative sandbox lock
-                        String appUrlContent = readFile('app_endpoint.txt').trim()
-                        sh "echo 'Raw read check: ${appUrlContent}'"
-                        
-                        env.setProperty("APP_URL", appUrlContent)
-                        echo "Successfully captured APP_URL: ${env.APP_URL}"
                     }
                 }
             }
@@ -185,7 +167,6 @@ pipeline {
 
         // =====================================================
         // 8. INSTALL MONITORING (PROMETHEUS + GRAFANA)
-        // FIXED: Using direct environment context injection to lock var mutations
         // =====================================================
         stage("Install Monitoring") {
             steps {
@@ -235,17 +216,6 @@ pipeline {
                                     echo "$HOSTNAME" > /workspace/grafana_endpoint.txt
                                 '
                         '''
-
-                        echo "===== HOST PERSISTENCE VERIFICATION (GRAFANA) ====="
-                        sh 'ls -l grafana_endpoint.txt'
-                        sh 'cat grafana_endpoint.txt'
-
-                        // FIXED: Global assignment via explicitly qualified env context overrides the declarative sandbox lock
-                        String grafanaUrlContent = readFile('grafana_endpoint.txt').trim()
-                        sh "echo 'Raw read check: ${grafanaUrlContent}'"
-                        
-                        env.setProperty("GRAFANA_URL", grafanaUrlContent)
-                        echo "Successfully captured GRAFANA_URL: ${env.GRAFANA_URL}"
                     }
                 }
             }
@@ -254,6 +224,7 @@ pipeline {
 
     // =====================================================
     // POST ACTIONS (SLACK NOTIFICATIONS)
+    // FIXED: Files read directly inside the execution scope of post
     // =====================================================
     post {
 
@@ -265,12 +236,16 @@ pipeline {
             echo 'Pipeline completed successfully.'
             script {
                 try {
+                    // Read the files directly inside the post-success scope to bypass declarative sandboxing
+                    def finalAppUrl = readFile('app_endpoint.txt').trim()
+                    def finalGrafanaUrl = readFile('grafana_endpoint.txt').trim()
+
                     withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
                         sh """
                             curl --fail -X POST "\$SLACK_WEBHOOK" \
                             -H "Content-Type: application/json" \
                             -d '{
-                                "text":"🎉 *Jenkins Pipeline Successful*\\n\\nProject: Cloud-Native Order Tracking Platform\\n\\n🚀 Build: #${BUILD_NUMBER}\\n📦 Job: ${JOB_NAME}\\n\\n🌐 Application:\\nhttp://${env.APP_URL}\\n\\n❤️ Health Check:\\nhttp://${env.APP_URL}/health\\n\\n📊 Grafana Dashboard:\\nhttp://${env.GRAFANA_URL}\\n\\n🔗 Jenkins Build:\\n${BUILD_URL}\\n\\nStatus: SUCCESS"
+                                "text":"🎉 *Jenkins Pipeline Successful*\\n\\nProject: Cloud-Native Order Tracking Platform\\n\\n🚀 Build: #${BUILD_NUMBER}\\n📦 Job: ${JOB_NAME}\\n\\n🌐 Application:\\nhttp://${finalAppUrl}\\n\\n❤️ Health Check:\\nhttp://${finalAppUrl}/health\\n\\n📊 Grafana Dashboard:\\nhttp://${finalGrafanaUrl}\\n\\n🔗 Jenkins Build:\\n${BUILD_URL}\\n\\nStatus: SUCCESS"
                             }'
                         """
                     }
