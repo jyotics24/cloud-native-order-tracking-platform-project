@@ -150,3 +150,18 @@ resource "aws_route_table_association" "eks_private_2_assoc" {
   subnet_id      = aws_subnet.eks_private_2.id
   route_table_id = aws_route_table.eks_private_rt.id
 }
+
+# =========================================================================
+# NEW: Security Group Rule to Open NodePorts for External Load Balancers
+# =========================================================================
+resource "aws_security_group_rule" "allow_lb_to_nodes" {
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow inbound traffic from Load Balancers to EKS NodePorts"
+  
+  # Links dynamically to the auto-generated group created by your EKS resource
+  security_group_id = aws_eks_cluster.order_tracking_eks.vpc_config[0].cluster_security_group_id
+}
