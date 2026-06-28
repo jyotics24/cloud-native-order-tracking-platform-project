@@ -14,6 +14,7 @@ pipeline {
             steps {
                 dir('app/backend') {
                     sh '''
+                        rm -rf venv
                         python3 -m venv venv
                         . venv/bin/activate
                         pip install -r requirements.txt
@@ -55,7 +56,7 @@ pipeline {
         // =====================================================
         stage('Trivy Scan') {
             steps {
-                sh "trivy image --severity CRITICAL,HIGH --exit-code 0 order-tracking-app:${BUILD_NUMBER}"
+                sh "trivy image --severity CRITICAL,HIGH --exit-code 1 order-tracking-app:${BUILD_NUMBER}"
             }
         }
 
