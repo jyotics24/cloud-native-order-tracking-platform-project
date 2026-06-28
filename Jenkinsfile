@@ -190,12 +190,32 @@ pipeline {
                                     
                                     ./kubectl apply -f kubernetes/deployment-final.yaml
                                     ./kubectl apply -f kubernetes/service.yaml
+
+                                    set +e
                                     ./kubectl rollout status deployment/order-tracking-app --timeout=300s
-                                    
+                                    ROLLOUT_EXIT_CODE=$?
+                                    set -e
+
                                     echo "===== CLUSTER SERVICE DEBUG ====="
                                     ./kubectl get nodes
                                     ./kubectl get svc
                                     ./kubectl get svc order-tracking-service -o wide
+
+                                    echo "===== POD STATUS ====="
+                                    ./kubectl get pods -l app=order-tracking-app -o wide
+
+                                    echo "===== POD DESCRIBE (events + reasons) ====="
+                                    for pod in $(./kubectl get pods -l app=order-tracking-app -o jsonpath="{.items[*].metadata.name}"); do
+                                        echo "--- describe $pod ---"
+                                        ./kubectl describe pod "$pod" | tail -40
+                                        echo "--- logs $pod ---"
+                                        ./kubectl logs "$pod" --tail=50 || echo "(no logs available yet)"
+                                    done
+
+                                    if [ "$ROLLOUT_EXIT_CODE" -ne 0 ]; then
+                                        echo "ERROR: rollout did not complete, see pod diagnostics above"
+                                        exit 1
+                                    fi
                                     
                                     HOSTNAME=""
                                     i=1
