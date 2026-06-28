@@ -32,12 +32,6 @@ resource "aws_eks_node_group" "order_tracking_nodes" {
     aws_subnet.eks_private_2.id
   ]
 
-  # FIXED: Links the explicit security group policy down to the EC2 worker instances
-  remote_access {
-    ec2_ssh_key               = null
-    source_security_group_ids = [aws_security_group.eks_node_port_access.id]
-  }
-
   # Small, cost-conscious node group: 1-2 t3.small nodes
   scaling_config {
     desired_size = 2
@@ -52,4 +46,18 @@ resource "aws_eks_node_group" "order_tracking_nodes" {
     aws_iam_role_policy_attachment.eks_cni_policy,
     aws_iam_role_policy_attachment.eks_ecr_readonly_policy
   ]
+}
+
+# =========================================================================
+# FIXED: Safe rule attachment that targets the cluster security group
+# directly to avoid remote_access SSH key requirements.
+# =========================================================================
+resource "aws_security_group_rule" "allow_lb_to_nodes_fixed" {
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow inbound Classic Load Balancer traffic to EKS NodePorts"
+  security_group_id = aws_eks_cluster.order_tracking_eks.vpc_config[0].cluster_security_group_id
 }
