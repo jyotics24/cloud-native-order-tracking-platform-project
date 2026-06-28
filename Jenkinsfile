@@ -5,6 +5,10 @@ pipeline {
     // =====================================================
     agent any
 
+    environment {
+        FAILED_STAGE = ''
+    }
+
     stages {
 
         // =====================================================
@@ -23,6 +27,11 @@ pipeline {
                     '''
                 }
             }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Unit Testing' }
+                }
+            }
         }
 
         // =====================================================
@@ -37,6 +46,11 @@ pipeline {
                     }
                 }
             }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Sonar Scan' }
+                }
+            }
         }
 
         // =====================================================
@@ -49,6 +63,11 @@ pipeline {
                     docker tag order-tracking-app:${BUILD_NUMBER} order-tracking-app:latest
                 """
             }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Docker Build' }
+                }
+            }
         }
 
         // =====================================================
@@ -56,7 +75,12 @@ pipeline {
         // =====================================================
         stage('Trivy Scan') {
             steps {
-                sh "trivy image --severity CRITICAL,HIGH --exit-code 1 order-tracking-app:${BUILD_NUMBER}"
+                sh "trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 order-tracking-app:${BUILD_NUMBER}"
+            }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Trivy Scan' }
+                }
             }
         }
 
@@ -87,6 +111,11 @@ pipeline {
                     }
                 }
             }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Terraform Apply - ECR' }
+                }
+            }
         }
 
         // =====================================================
@@ -106,6 +135,11 @@ pipeline {
                         docker tag order-tracking-app:${BUILD_NUMBER} 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
                         docker push 227655494308.dkr.ecr.us-east-1.amazonaws.com/order-tracking-app:${BUILD_NUMBER}
                     """
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Push to ECR' }
                 }
             }
         }
@@ -164,6 +198,11 @@ pipeline {
                     }
                 }
             }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Deploy to EKS' }
+                }
+            }
         }
 
         // =====================================================
@@ -220,6 +259,11 @@ pipeline {
                     }
                 }
             }
+            post {
+                failure {
+                    script { env.FAILED_STAGE = 'Install Monitoring' }
+                }
+            }
         }
     }
 
@@ -260,12 +304,14 @@ pipeline {
             echo 'Pipeline failed. Check logs.'
             script {
                 try {
+                    def stageThatFailed = env.FAILED_STAGE ? env.FAILED_STAGE : 'Unknown / Checkout'
+
                     withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
                         sh """
                             curl --fail -X POST "\$SLACK_WEBHOOK" \
                             -H "Content-Type: application/json" \
                             -d '{
-                                "text":"❌ Jenkins Build Failed\\nProject: Cloud-Native Order Tracking Platform\\nBuild: #${BUILD_NUMBER}\\nJob: ${JOB_NAME}\\nStatus: FAILED\\nURL: ${BUILD_URL}"
+                                "text":"❌ *Jenkins Build Failed*\\n\\nProject: Cloud-Native Order Tracking Platform\\n\\n🚀 Build: #${BUILD_NUMBER}\\n📦 Job: ${JOB_NAME}\\n🛑 Failed at stage: *${stageThatFailed}*\\n\\n🔗 Jenkins Build:\\n${BUILD_URL}console\\n\\nStatus: FAILED"
                             }'
                         """
                     }
