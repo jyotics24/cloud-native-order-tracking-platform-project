@@ -5,6 +5,7 @@ pipeline {
     // =====================================================
     agent any
 
+    // Global pipeline environment variables for dynamic notifications
     environment {
         APP_URL      = ''
         GRAFANA_URL  = ''
@@ -116,6 +117,7 @@ pipeline {
 
         // =====================================================
         // 7. DEPLOY TO AWS EKS
+        // FIXED: Captured endpoint inline within the main execution container
         // =====================================================
         stage("Deploy to EKS") {
             steps {
@@ -127,56 +129,45 @@ pipeline {
                             kubernetes/deployment.yaml > kubernetes/deployment-final.yaml
 
                             grep -q '227655494308' kubernetes/deployment-final.yaml || (echo 'ERROR: sed replace failed' && exit 1)
-
-                            docker run --rm \
-                                -v \$(pwd)/kubernetes:/manifests \
-                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                                -e AWS_DEFAULT_REGION=us-east-1 \
-                                --entrypoint /bin/sh \
-                                amazon/aws-cli -c "
-                                    set -e
-                                    curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
-                                    chmod +x kubectl
-                                    aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
-                                    ./kubectl apply -f /manifests/deployment-final.yaml
-                                    ./kubectl apply -f /manifests/service.yaml
-                                    ./kubectl rollout status deployment/order-tracking-app --timeout=120s
-                                "
                         """
 
-                        echo "Waiting for AWS Application LoadBalancer Hostname to provision..."
+                        // Execute deployment and capture the hostname string immediately after rollout verification
                         def fetchedAppUrl = sh(
                             returnStdout: true,
-                            script: """
+                            script: '''
                                 docker run --rm \
-                                    -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                                    -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                                    -v $(pwd)/kubernetes:/manifests \
+                                    -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+                                    -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
                                     -e AWS_DEFAULT_REGION=us-east-1 \
                                     --entrypoint /bin/sh \
-                                    amazon/aws-cli -c "
-                                        curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl > /dev/null 2>&1
+                                    amazon/aws-cli -c '
+                                        set -e
+                                        curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
                                         chmod +x kubectl
-                                        aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks > /dev/null 2>&1
+                                        aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
+                                        ./kubectl apply -f /manifests/deployment-final.yaml
+                                        ./kubectl apply -f /manifests/service.yaml
+                                        ./kubectl rollout status deployment/order-tracking-app --timeout=120s
                                         
-                                        # FIXED: Swapped brace expansion for portable POSIX while loop
-                                        HOSTNAME=\\"\\"
+                                        echo "--- HOSTNAME EXTRACTION START ---"
+                                        HOSTNAME=""
                                         i=1
-                                        while [ \\\$i -le 20 ]; do
-                                            HOSTNAME=\\\$(./kubectl get svc order-tracking-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-                                            if [ ! -z \\"\$HOSTNAME\\" ]; then
+                                        while [ $i -le 20 ]; do
+                                            HOSTNAME=$(./kubectl get svc order-tracking-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null || true)
+                                            if [ ! -z "$HOSTNAME" ]; then
                                                 break
                                             fi
-                                            i=\\\$((i+1))
+                                            i=$((i+1))
                                             sleep 10
                                         done
-
-                                        echo -n \\"\$HOSTNAME\\"
-                                    "
-                            """
+                                        echo "$HOSTNAME"
+                                    '
+                            '''
                         ).trim()
 
-                        env.APP_URL = fetchedAppUrl
+                        // Parse out any lingering container text and isolate the clean hostname string
+                        env.APP_URL = fetchedAppUrl.tokenize('\n').last().trim()
                         echo "Successfully captured APP_URL: ${env.APP_URL}"
                     }
                 }
@@ -185,6 +176,7 @@ pipeline {
 
         // =====================================================
         // 8. INSTALL MONITORING (PROMETHEUS + GRAFANA)
+        // FIXED: Captured endpoint inline within the main installation container
         // =====================================================
         stage("Install Monitoring") {
             steps {
@@ -193,63 +185,49 @@ pipeline {
                     string(credentialsId: 'grafana-admin-password', variable: 'GRAFANA_ADMIN_PASSWORD')
                 ]) {
                     script {
-                        sh """
-                            set -e
-                            docker run --rm \
-                                -v \$(pwd):/workspace \
-                                -w /workspace \
-                                -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                                -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
-                                -e AWS_DEFAULT_REGION=us-east-1 \
-                                -e GRAFANA_ADMIN_PASSWORD=\$GRAFANA_ADMIN_PASSWORD \
-                                --entrypoint /bin/sh \
-                                amazon/aws-cli -c "
-                                    set -e
-                                    (yum install -y openssl tar gzip -q 2>/dev/null) || (microdnf install -y openssl tar gzip 2>/dev/null) || true
-                                    curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
-                                    chmod +x kubectl
-                                    mv kubectl /usr/local/bin/kubectl
-                                    curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-                                    chmod +x get_helm.sh
-                                    ./get_helm.sh --version v3.16.0
-                                    aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
-                                    chmod +x monitoring/install-monitoring.sh
-                                    ./monitoring/install-monitoring.sh
-                                "
-                        """
-
-                        echo "Waiting for AWS Grafana LoadBalancer Hostname to provision..."
+                        // Execute installation and cleanly fetch the endpoint before container exit
                         def fetchedGrafanaUrl = sh(
                             returnStdout: true,
-                            script: """
+                            script: '''
                                 docker run --rm \
-                                    -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
-                                    -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                                    -v $(pwd):/workspace \
+                                    -w /workspace \
+                                    -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+                                    -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
                                     -e AWS_DEFAULT_REGION=us-east-1 \
+                                    -e GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD \
                                     --entrypoint /bin/sh \
-                                    amazon/aws-cli -c "
-                                        curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl > /dev/null 2>&1
+                                    amazon/aws-cli -c '
+                                        set -e
+                                        (yum install -y openssl tar gzip -q 2>/dev/null) || (microdnf install -y openssl tar gzip 2>/dev/null) || true
+                                        curl -LO https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
                                         chmod +x kubectl
-                                        aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks > /dev/null 2>&1
+                                        mv kubectl /usr/local/bin/kubectl
+                                        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+                                        chmod +x get_helm.sh
+                                        ./get_helm.sh --version v3.16.0
+                                        aws eks update-kubeconfig --region us-east-1 --name order-tracking-eks
+                                        chmod +x monitoring/install-monitoring.sh
+                                        ./monitoring/install-monitoring.sh
                                         
-                                        # FIXED: Swapped brace expansion for portable POSIX while loop
-                                        HOSTNAME=\\"\\"
+                                        echo "--- HOSTNAME EXTRACTION START ---"
+                                        HOSTNAME=""
                                         i=1
-                                        while [ \\\$i -le 20 ]; do
-                                            HOSTNAME=\\\$(./kubectl get svc prometheus-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-                                            if [ ! -z \\"\$HOSTNAME\\" ]; then
+                                        while [ $i -le 20 ]; do
+                                            HOSTNAME=$(/usr/local/bin/kubectl get svc prometheus-grafana -n monitoring -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null || true)
+                                            if [ ! -z "$HOSTNAME" ]; then
                                                 break
                                             fi
-                                            i=\\\$((i+1))
+                                            i=$((i+1))
                                             sleep 10
                                         done
-
-                                        echo -n \\"\$HOSTNAME\\"
-                                    "
-                            """
+                                        echo "$HOSTNAME"
+                                    '
+                            '''
                         ).trim()
 
-                        env.GRAFANA_URL = fetchedGrafanaUrl
+                        // Parse out any lingering container text and isolate the clean hostname string
+                        env.GRAFANA_URL = fetchedGrafanaUrl.tokenize('\n').last().trim()
                         echo "Successfully captured GRAFANA_URL: ${env.GRAFANA_URL}"
                     }
                 }
