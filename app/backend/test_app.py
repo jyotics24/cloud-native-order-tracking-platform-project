@@ -26,6 +26,22 @@ def test_health_endpoint(client):
     assert response.get_json() == {"status": "healthy"}
 
 
+def test_home_page_returns_200(client):
+    # The home page should render successfully and return HTML.
+    response = client.get("/")
+    assert response.status_code == 200
+
+
+def test_list_orders_returns_200(client):
+    # Listing orders should always return 200 with an "orders" key,
+    # even before any orders have been created.
+    response = client.get("/orders")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "orders" in data
+    assert isinstance(data["orders"], list)
+
+
 def test_create_order_returns_201(client):
     # Creating an order should return HTTP 201 (Created),
     # along with an id and a status of "CREATED".
