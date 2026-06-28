@@ -1,13 +1,11 @@
+def failedStage = 'Unknown / Checkout'
+
 pipeline {
 
     // =====================================================
     // Jenkins agent (runs on any available executor)
     // =====================================================
     agent any
-
-    environment {
-        FAILED_STAGE = ''
-    }
 
     stages {
 
@@ -29,7 +27,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Unit Testing' }
+                    script { failedStage = 'Unit Testing' }
                 }
             }
         }
@@ -48,7 +46,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Sonar Scan' }
+                    script { failedStage = 'Sonar Scan' }
                 }
             }
         }
@@ -65,7 +63,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Docker Build' }
+                    script { failedStage = 'Docker Build' }
                 }
             }
         }
@@ -79,7 +77,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Trivy Scan' }
+                    script { failedStage = 'Trivy Scan' }
                 }
             }
         }
@@ -113,7 +111,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Terraform Apply - ECR' }
+                    script { failedStage = 'Terraform Apply - ECR' }
                 }
             }
         }
@@ -139,7 +137,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Push to ECR' }
+                    script { failedStage = 'Push to ECR' }
                 }
             }
         }
@@ -200,7 +198,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Deploy to EKS' }
+                    script { failedStage = 'Deploy to EKS' }
                 }
             }
         }
@@ -261,7 +259,7 @@ pipeline {
             }
             post {
                 failure {
-                    script { env.FAILED_STAGE = 'Install Monitoring' }
+                    script { failedStage = 'Install Monitoring' }
                 }
             }
         }
@@ -304,7 +302,7 @@ pipeline {
             echo 'Pipeline failed. Check logs.'
             script {
                 try {
-                    def stageThatFailed = env.FAILED_STAGE ? env.FAILED_STAGE : 'Unknown / Checkout'
+                    def stageThatFailed = failedStage
 
                     withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
                         sh """
